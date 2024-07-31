@@ -124,22 +124,26 @@ pub struct TestBank {
 impl TestBank {
     pub fn from_hf(repo: String) -> Result<Self, Box<dyn std::error::Error>> {
         let api = hf_hub::api::sync::Api::new()?;
-        let ds = candle_datasets::hub::from_hub(&api, repo.clone())?;
-        let ds = ds.first().ok_or("No train split")?;
-        let rowiter = ds.get_row_iter(None)?;
+        let ds_orig = candle_datasets::hub::from_hub(&api, repo.clone())?;
+
+        assert!(ds_orig.len() != 0);
         let mut map = HashMap::new();
-        for r in rowiter.into_iter() {
-            let r = r?;
-            let test = r.get_string(0)?.to_owned();
-            let hash = r.get_string(1)?.to_owned();
-            // make sure it's md5
-            assert!(
-                hash.len() == 32,
-                "hash is not 32 chars long, got {} -- needs to be md5",
-                hash.len()
-            );
-            map.insert(hash, test);
+        for ds in &ds_orig {
+            let rowiter = ds.get_row_iter(None)?;
+            for r in rowiter.into_iter() {
+                let r = r?;
+                let test = r.get_string(0)?.to_owned();
+                let hash = r.get_string(1)?.to_owned();
+                // make sure it's md5
+                assert!(
+                    hash.len() == 32,
+                    "hash is not 32 chars long, got {} -- needs to be md5",
+                    hash.len()
+                );
+                map.insert(hash, test);
+            }
         }
+
         let last_accessed = Instant::now();
         Ok(Self {
             repo,
@@ -326,12 +330,14 @@ async fn run_py_code(input: JsonInput) -> (String, String) {
             code.push_str("\n\n");
             code.push_str(&test);
         } else {
-            return (
-                "-1\nFailed to get test from test bank".to_string(),
-                tempfile,
-            );
+            if input.json_resp.unwrap_or(false) {
+                return (serde_json::to_string(&serde_json::json!({ "status": 1, "output": "Test hash not found" })).unwrap(), tempfile);
+            } else {
+                return ("1\nTest hash not found".to_string(), tempfile);
+            }
         }
     }
+
     tokio::fs::write(&tempfile, code).await.unwrap();
     let output = run_program_with_timeout(
         "bash",
@@ -473,7 +479,10 @@ async fn py_exec(json: String) -> String {
     };
 
     let (res, tempfile) = run_py_code(input).await;
-    tokio::fs::remove_file(&tempfile).await.ok();
+    if tempfile == "hash_not_found" {
+        return res;
+    }
+    tokio::fs::remove_file(&tempfile).await.unwrap();
     res
 }
 

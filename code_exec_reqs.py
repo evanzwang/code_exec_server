@@ -1,6 +1,7 @@
 from typing import List, Optional, Tuple
 import hashlib
 import time
+import warnings
 import requests
 import json
 import threading
@@ -64,6 +65,7 @@ def exec_test(
                     timeout * 2) if timeout_on_client or EXECUTOR_AUTH else None,
                 headers=headers
             )
+
             if json_resp:
                 j = r.json()
                 if "detail" in j:
@@ -80,6 +82,9 @@ def exec_test(
                 resp = lines[0]
                 outs = "\n".join(lines[1:])
             assert resp == "0" or resp == "1"
+            
+            if outs == "Test hash not found":
+                warnings.warn("A test hash not found. Marking test as FAILED.")
             return resp == "0", outs
         except Exception as e:
             # check if the server is alive
