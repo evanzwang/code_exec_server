@@ -331,9 +331,9 @@ async fn run_py_code(input: JsonInput) -> (String, String) {
             code.push_str(&test);
         } else {
             if input.json_resp.unwrap_or(false) {
-                return (serde_json::to_string(&serde_json::json!({ "status": 1, "output": "Test hash not found" })).unwrap(), tempfile);
+                return (serde_json::to_string(&serde_json::json!({ "status": 1, "output": "Test hash not found" })).unwrap(), "hash_not_found".to_string());
             } else {
-                return ("1\nTest hash not found".to_string(), tempfile);
+                return ("1\nTest hash not found".to_string(), "hash_not_found".to_string());
             }
         }
     }
@@ -482,6 +482,7 @@ async fn py_exec(json: String) -> String {
     if tempfile == "hash_not_found" {
         return res;
     }
+
     tokio::fs::remove_file(&tempfile).await.unwrap();
     res
 }

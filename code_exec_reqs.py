@@ -6,9 +6,12 @@ import requests
 import json
 import threading
 import os
+import random
 
 EXECUTOR_URL = os.getenv("EXECUTOR_URL", None)
 EXECUTOR_AUTH = os.getenv("EXECUTOR_AUTH", None)
+START_BACKOFF = 3
+MAX_BACKOFF = 60 * 2
 
 
 def exec_test(
@@ -53,6 +56,7 @@ def exec_test(
         assert json_resp, "Auth only works with json responses"
         d = {"args": d}
     data = json.dumps(d)
+    curr_backoff = START_BACKOFF
     while True:  # loop for server downtime
         try:
             headers = {"Content-Type": "application/json"}
@@ -90,8 +94,11 @@ def exec_test(
             # check if the server is alive
             if not check_executor_alive(server):
                 # wait for the server to come back up
-                print("Request rejected, waiting 3 seconds and then retrying...")
-                time.sleep(3)
+                print(f"Request rejected, waiting {curr_backoff} seconds and then retrying...")
+                time.sleep(curr_backoff)
+                curr_backoff *= 1.5
+                curr_backoff = min(curr_backoff, MAX_BACKOFF)
+                curr_backoff += random.random() * curr_backoff / 3
                 continue
             else:
                 # genuine server error
