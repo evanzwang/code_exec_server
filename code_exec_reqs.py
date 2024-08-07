@@ -7,6 +7,7 @@ import json
 import threading
 import os
 import random
+from uuid import uuid4
 
 EXECUTOR_URL = os.getenv("EXECUTOR_URL", None)
 EXECUTOR_AUTH = os.getenv("EXECUTOR_AUTH", None)
@@ -57,6 +58,7 @@ def exec_test(
         d = {"args": d}
     data = json.dumps(d)
     curr_backoff = START_BACKOFF
+    uu = str(uuid4())[:6]
     while True:  # loop for server downtime
         try:
             headers = {"Content-Type": "application/json"}
@@ -88,13 +90,19 @@ def exec_test(
             assert resp == "0" or resp == "1"
             
             if outs == "Test hash not found":
-                warnings.warn("A test hash not found. Marking test as FAILED.")
+                warnings.warn("A test hash not found. Marking test as: (default Fail).")
+                print(f"Hash not found, retrying; waiting {curr_backoff} seconds", uu, "HASH:", testhash)
+                time.sleep(curr_backoff)
+                curr_backoff *= 1.5
+                curr_backoff = min(curr_backoff, MAX_BACKOFF)
+                curr_backoff += random.random() * curr_backoff / 3
+                continue
             return resp == "0", outs
         except Exception as e:
             # check if the server is alive
             if not check_executor_alive(server):
                 # wait for the server to come back up
-                print(f"Request rejected, waiting {curr_backoff} seconds and then retrying...")
+                print(f"Request rejected, waiting {curr_backoff} seconds and then retrying...", uu)
                 time.sleep(curr_backoff)
                 curr_backoff *= 1.5
                 curr_backoff = min(curr_backoff, MAX_BACKOFF)
